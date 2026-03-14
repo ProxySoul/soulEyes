@@ -54,37 +54,27 @@ jobs:
           mkdir -p "$APP/Contents/Resources"
           cp SoulEyes "$APP/Contents/MacOS/SoulEyes"
 
-          cat > "$APP/Contents/Info.plist" << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleName</key>
-            <string>SoulEyes</string>
-            <key>CFBundleDisplayName</key>
-            <string>SoulEyes</string>
-            <key>CFBundleIdentifier</key>
-            <string>com.proxysoul.souleyes</string>
-            <key>CFBundleVersion</key>
-            <string>${VERSION}</string>
-            <key>CFBundleShortVersionString</key>
-            <string>${VERSION}</string>
-            <key>CFBundleExecutable</key>
-            <string>SoulEyes</string>
-            <key>CFBundlePackageType</key>
-            <string>APPL</string>
-            <key>LSMinimumSystemVersion</key>
-            <string>13.0</string>
-            <key>LSUIElement</key>
-            <true/>
-            <key>NSHighResolutionCapable</key>
-            <true/>
-          </dict>
-          </plist>
-          EOF
+          /usr/libexec/PlistBuddy -c "Clear dict" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleName string SoulEyes" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string SoulEyes" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string com.proxysoul.souleyes" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $VERSION" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $VERSION" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string SoulEyes" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :CFBundlePackageType string APPL" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :LSMinimumSystemVersion string 13.0" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Add :NSHighResolutionCapable bool true" "$APP/Contents/Info.plist"
 
           echo "Bundle created:"
           du -sh "$APP"
+          echo "Info.plist:"
+          cat "$APP/Contents/Info.plist"
+
+      - name: Ad-hoc code sign
+        run: |
+          codesign --force --deep --sign - SoulEyes.app
+          codesign --verify --verbose SoulEyes.app
 
       - name: Package .app
         run: |
@@ -103,20 +93,24 @@ jobs:
         with:
           name: SoulEyes ${{ steps.version.outputs.version }}
           body: |
-            ## 👁 SoulEyes ${{ steps.version.outputs.version }}
+            ## SoulEyes ${{ steps.version.outputs.version }}
 
             **Universal binary** — runs natively on both Apple Silicon and Intel Macs.
 
             ### Install
             1. Download `SoulEyes.app.zip` below
             2. Unzip and drag `SoulEyes.app` to `/Applications`
-            3. Open it — the 👁 icon appears in your menu bar
+            3. **First launch:** Right-click the app → "Open" → click "Open" in the dialog
+               (macOS blocks unsigned apps on first run — this only happens once)
+            4. The eye icon appears in your menu bar
+
+            > **Alternative:** Run `xattr -cr /Applications/SoulEyes.app` in Terminal before opening.
 
             ### Requirements
             - macOS 13+ (Ventura or later)
 
             ---
-            *Built by [proxysoul.com](https://proxysoul.com) with SoulForge ⚡*
+            *Built by [proxysoul.com](https://proxysoul.com) with SoulForge*
           files: SoulEyes.app.zip
           generate_release_notes: true
           draft: false
