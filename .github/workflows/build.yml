@@ -1,4 +1,4 @@
-name: Build
+name: Build & Release
 
 on:
   push:
@@ -7,27 +7,54 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build binary
+      - name: Determine version
+        id: version
         run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="0.0.0-dev.$(git rev-parse --short HEAD)"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building version: $VERSION"
+
+      - name: Build universal binary (arm64 + x86_64)
+        run: |
+          # Build for Apple Silicon
           swiftc -O -whole-module-optimization \
+            -target arm64-apple-macosx13.0 \
             -framework Cocoa -framework QuartzCore \
-            -o SoulEyes SoulEyes.swift
+            -o SoulEyes-arm64 SoulEyes.swift
+
+          # Build for Intel
+          swiftc -O -whole-module-optimization \
+            -target x86_64-apple-macosx13.0 \
+            -framework Cocoa -framework QuartzCore \
+            -o SoulEyes-x86_64 SoulEyes.swift
+
+          # Combine into universal binary
+          lipo -create SoulEyes-arm64 SoulEyes-x86_64 -output SoulEyes
+          lipo -info SoulEyes
+          ls -lh SoulEyes
 
       - name: Create .app bundle
         run: |
+          VERSION="${{ steps.version.outputs.version }}"
           APP="SoulEyes.app"
           mkdir -p "$APP/Contents/MacOS"
           mkdir -p "$APP/Contents/Resources"
           cp SoulEyes "$APP/Contents/MacOS/SoulEyes"
-          
-          # Info.plist
-          cat > "$APP/Contents/Info.plist" << 'PLIST'
+
+          cat > "$APP/Contents/Info.plist" << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -39,9 +66,9 @@ jobs:
             <key>CFBundleIdentifier</key>
             <string>com.proxysoul.souleyes</string>
             <key>CFBundleVersion</key>
-            <string>1.0.0</string>
+            <string>${VERSION}</string>
             <key>CFBundleShortVersionString</key>
-            <string>1.0.0</string>
+            <string>${VERSION}</string>
             <key>CFBundleExecutable</key>
             <string>SoulEyes</string>
             <key>CFBundlePackageType</key>
@@ -52,26 +79,45 @@ jobs:
             <true/>
             <key>NSHighResolutionCapable</key>
             <true/>
-            <key>CFBundleIconFile</key>
-            <string>AppIcon</string>
           </dict>
           </plist>
-          PLIST
+          EOF
+
+          echo "Bundle created:"
+          du -sh "$APP"
 
       - name: Package .app
         run: |
           ditto -c -k --keepParent SoulEyes.app SoulEyes.app.zip
           ls -lh SoulEyes.app.zip
 
-      - name: Upload artifact
+      - name: Upload artifact (every push)
         uses: actions/upload-artifact@v4
         with:
-          name: SoulEyes.app
+          name: SoulEyes-${{ steps.version.outputs.version }}
           path: SoulEyes.app.zip
 
-      - name: Release
+      - name: Create GitHub Release (on tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          name: SoulEyes ${{ steps.version.outputs.version }}
+          body: |
+            ## 👁 SoulEyes ${{ steps.version.outputs.version }}
+
+            **Universal binary** — runs natively on both Apple Silicon and Intel Macs.
+
+            ### Install
+            1. Download `SoulEyes.app.zip` below
+            2. Unzip and drag `SoulEyes.app` to `/Applications`
+            3. Open it — the 👁 icon appears in your menu bar
+
+            ### Requirements
+            - macOS 13+ (Ventura or later)
+
+            ---
+            *Built by [proxysoul.com](https://proxysoul.com) with SoulForge ⚡*
           files: SoulEyes.app.zip
           generate_release_notes: true
+          draft: false
+          prerelease: false
