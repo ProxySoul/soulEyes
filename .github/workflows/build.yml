@@ -1,0 +1,77 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build binary
+        run: |
+          swiftc -O -whole-module-optimization \
+            -framework Cocoa -framework QuartzCore \
+            -o SoulEyes SoulEyes.swift
+
+      - name: Create .app bundle
+        run: |
+          APP="SoulEyes.app"
+          mkdir -p "$APP/Contents/MacOS"
+          mkdir -p "$APP/Contents/Resources"
+          cp SoulEyes "$APP/Contents/MacOS/SoulEyes"
+          
+          # Info.plist
+          cat > "$APP/Contents/Info.plist" << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key>
+            <string>SoulEyes</string>
+            <key>CFBundleDisplayName</key>
+            <string>SoulEyes</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.proxysoul.souleyes</string>
+            <key>CFBundleVersion</key>
+            <string>1.0.0</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.0.0</string>
+            <key>CFBundleExecutable</key>
+            <string>SoulEyes</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>13.0</string>
+            <key>LSUIElement</key>
+            <true/>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+            <key>CFBundleIconFile</key>
+            <string>AppIcon</string>
+          </dict>
+          </plist>
+          PLIST
+
+      - name: Package .app
+        run: |
+          ditto -c -k --keepParent SoulEyes.app SoulEyes.app.zip
+          ls -lh SoulEyes.app.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SoulEyes.app
+          path: SoulEyes.app.zip
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: SoulEyes.app.zip
+          generate_release_notes: true
